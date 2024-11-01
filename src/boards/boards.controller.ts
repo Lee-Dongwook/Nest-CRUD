@@ -1,48 +1,49 @@
-import {
-  Body,
-  Controller,
-  Delete,
-  Get,
-  Param,
-  Patch,
-  Post,
-  UsePipes,
-  ValidationPipe,
-} from '@nestjs/common';
-import { Board, BoardStatus } from './board-status.enum';
-import { BoardsService } from './boards.service';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import { BoardStatus } from './board-status.enum';
 import { CreateBoardDto } from './dto/create-board.dto';
-import { BoardStatusValidationPipe } from './pipes/board-status-validation.pipe';
+import { BoardRepository } from './board.repository';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Board } from './board.entity';
 
-@Controller('boards')
-export class BoardsController {
-  constructor(private boardsService: BoardsService) {}
+@Injectable()
+export class BoardsService {
+  constructor(
+    @InjectRepository(BoardRepository)
+    private boardRepository: BoardRepository,
+  ) {}
 
-  @Get('/')
-  getAllBoard(): Board[] {
-    return this.boardsService.getAllBoards();
+  async getAllBoards(): Promise<Board[]> {
+    return this.boardRepository.find();
   }
 
-  @Post()
-  @UsePipes(ValidationPipe)
-  createBoard(@Body() createBoardDto: CreateBoardDto): Board {
-    return this.boardsService.createBoard(createBoardDto);
+  createBoard(createBoardDto: CreateBoardDto): Promise<Board> {
+    return this.boardRepository.createBoard(createBoardDto);
   }
 
-  @Get('/:id')
-  getBoardById(@Param('id') id: string): Board {
-    return this.boardsService.getBoardById(id);
+  async getBoardById(id: number): Promise<Board> {
+    const found = await this.boardRepository.findOne(id);
+
+    if (!found) {
+      throw new NotFoundException(`Can't find Board with id ${id}`);
+    }
+
+    return found;
   }
 
-  @Delete('/:id')
-  deleteBoard(@Param('id') id: string): void {
-    this.boardsService.deleteBoard(id);
+  async deleteBoard(id: number): Promise<void> {
+    const result = await this.boardRepository.delete(id);
+
+    if (result.affected === 0) {
+      throw new NotFoundException(`Can't find Board with id ${id}`);
+    }
   }
-  @Patch('/:id/status')
-  updateBoardStatus(
-    @Param('id') id: string,
-    @Body('status', BoardStatusValidationPipe) status: BoardStatus,
-  ) {
-    return this.boardsService.updateBoardStatus(id, status);
+
+  async updateBoardStatus(id: number, status: BoardStatus): Promise<Board> {
+    const board = await this.getBoardById(id);
+
+    board.status = status;
+    await this.boardRepository.save(board);
+
+    return board;
   }
 }
